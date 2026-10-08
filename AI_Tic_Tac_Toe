@@ -1,0 +1,261 @@
+import sys
+import math
+import pygame
+
+# --- Constants & Configuration ---
+BOARD_WIDTH, BOARD_HEIGHT = 600, 600
+PANEL_HEIGHT = 100
+WIDTH, HEIGHT = BOARD_WIDTH, BOARD_HEIGHT + PANEL_HEIGHT
+
+LINE_WIDTH = 15
+BOARD_ROWS, BOARD_COLS = 3, 3
+SQUARE_SIZE = BOARD_WIDTH // BOARD_COLS
+
+# Colors
+BG_COLOR = (28, 170, 156)
+PANEL_BG = (20, 130, 120)
+LINE_COLOR = (23, 145, 135)
+CIRCLE_COLOR = (239, 231, 200)
+CROSS_COLOR = (84, 84, 84)
+
+# Button Colors
+BTN_RESTART_BG = (52, 152, 219)
+BTN_RESTART_HOVER = (41, 128, 185)
+BTN_EXIT_BG = (231, 76, 60)
+BTN_EXIT_HOVER = (192, 57, 43)
+TEXT_COLOR = (255, 255, 255)
+
+# Shapes
+CIRCLE_RADIUS = SQUARE_SIZE // 3
+CIRCLE_WIDTH = 15
+CROSS_WIDTH = 25
+SPACE = SQUARE_SIZE // 4
+
+# --- Pygame Setup ---
+pygame.init()
+pygame.font.init()
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Tic-Tac-Toe (Human vs AI)")
+FONT = pygame.font.SysFont("Arial", 22, bold=True)
+
+
+class Board:
+    def __init__(self):
+        self.grid = [[0 for _ in range(BOARD_COLS)] for _ in range(BOARD_ROWS)]
+        self.draw_lines()
+
+    def draw_lines(self):
+        # Fill game board background
+        pygame.draw.rect(screen, BG_COLOR, (0, 0, BOARD_WIDTH, BOARD_HEIGHT))
+        
+        # Horizontal lines
+        for r in range(1, BOARD_ROWS):
+            pygame.draw.line(screen, LINE_COLOR, (0, r * SQUARE_SIZE), (BOARD_WIDTH, r * SQUARE_SIZE), LINE_WIDTH)
+        # Vertical lines
+        for c in range(1, BOARD_COLS):
+            pygame.draw.line(screen, LINE_COLOR, (c * SQUARE_SIZE, 0), (c * SQUARE_SIZE, BOARD_HEIGHT), LINE_WIDTH)
+
+    def draw_figures(self):
+        for row in range(BOARD_ROWS):
+            for col in range(BOARD_COLS):
+                if self.grid[row][col] == 1:
+                    # Draw O
+                    center = (int(col * SQUARE_SIZE + SQUARE_SIZE // 2), int(row * SQUARE_SIZE + SQUARE_SIZE // 2))
+                    pygame.draw.circle(screen, CIRCLE_COLOR, center, CIRCLE_RADIUS, CIRCLE_WIDTH)
+                elif self.grid[row][col] == 2:
+                    # Draw X
+                    start_top = (col * SQUARE_SIZE + SPACE, row * SQUARE_SIZE + SPACE)
+                    end_bottom = (col * SQUARE_SIZE + SQUARE_SIZE - SPACE, row * SQUARE_SIZE + SQUARE_SIZE - SPACE)
+                    pygame.draw.line(screen, CROSS_COLOR, start_top, end_bottom, CROSS_WIDTH)
+
+                    start_bottom = (col * SQUARE_SIZE + SPACE, row * SQUARE_SIZE + SQUARE_SIZE - SPACE)
+                    end_top = (col * SQUARE_SIZE + SQUARE_SIZE - SPACE, row * SQUARE_SIZE + SPACE)
+                    pygame.draw.line(screen, CROSS_COLOR, start_bottom, end_top, CROSS_WIDTH)
+
+    def mark_square(self, row, col, player):
+        self.grid[row][col] = player
+
+    def is_empty_square(self, row, col):
+        return self.grid[row][col] == 0
+
+    def get_empty_squares(self):
+        return [(r, c) for r in range(BOARD_ROWS) for c in range(BOARD_COLS) if self.grid[r][c] == 0]
+
+    def is_full(self):
+        return len(self.get_empty_squares()) == 0
+
+    def check_win(self, player):
+        for col in range(BOARD_COLS):
+            if self.grid[0][col] == self.grid[1][col] == self.grid[2][col] == player:
+                return True
+        for row in range(BOARD_ROWS):
+            if self.grid[row][0] == self.grid[row][1] == self.grid[row][2] == player:
+                return True
+        if self.grid[0][0] == self.grid[1][1] == self.grid[2][2] == player:
+            return True
+        if self.grid[2][0] == self.grid[1][1] == self.grid[0][2] == player:
+            return True
+        return False
+
+
+# --- AI Class (Minimax Algorithm) ---
+class AI:
+    def __init__(self, player=2):
+        self.player = player
+
+    def minimax(self, board, depth, is_maximizing):
+        if board.check_win(self.player):
+            return 10 - depth, None
+        if board.check_win(1):
+            return depth - 10, None
+        if board.is_full():
+            return 0, None
+
+        empty_sqs = board.get_empty_squares()
+
+        if is_maximizing:
+            max_eval = -math.inf
+            best_move = None
+            for (row, col) in empty_sqs:
+                board.mark_square(row, col, self.player)
+                eval_val, _ = self.minimax(board, depth + 1, False)
+                board.mark_square(row, col, 0)
+
+                if eval_val > max_eval:
+                    max_eval = eval_val
+                    best_move = (row, col)
+            return max_eval, best_move
+
+        else:
+            min_eval = math.inf
+            best_move = None
+            for (row, col) in empty_sqs:
+                board.mark_square(row, col, 1)
+                eval_val, _ = self.minimax(board, depth + 1, True)
+                board.mark_square(row, col, 0)
+
+                if eval_val < min_eval:
+                    min_eval = eval_val
+                    best_move = (row, col)
+            return min_eval, best_move
+
+    def eval(self, board):
+        _, best_move = self.minimax(board, 0, True)
+        return best_move
+
+
+# --- UI Helpers ---
+def draw_buttons(restart_rect, exit_rect, mouse_pos):
+    # Draw Bottom Panel Background
+    pygame.draw.rect(screen, PANEL_BG, (0, BOARD_HEIGHT, WIDTH, PANEL_HEIGHT))
+
+    # Restart Button
+    r_color = BTN_RESTART_HOVER if restart_rect.collidepoint(mouse_pos) else BTN_RESTART_BG
+    pygame.draw.rect(screen, r_color, restart_rect, border_radius=10)
+    r_text = FONT.render("Restart (R)", True, TEXT_COLOR)
+    screen.blit(r_text, r_text.get_rect(center=restart_rect.center))
+
+    # Exit Button
+    e_color = BTN_EXIT_HOVER if exit_rect.collidepoint(mouse_pos) else BTN_EXIT_BG
+    pygame.draw.rect(screen, e_color, exit_rect, border_radius=10)
+    e_text = FONT.render("Exit (ESC)", True, TEXT_COLOR)
+    screen.blit(e_text, e_text.get_rect(center=exit_rect.center))
+
+
+# --- Main Loop ---
+def main():
+    board = Board()
+    ai = AI(player=2)
+
+    human = 1
+    player = 1
+    game_over = False
+
+    # Button Rectangles
+    btn_width, btn_height = 160, 50
+    btn_y = BOARD_HEIGHT + (PANEL_HEIGHT - btn_height) // 2
+    restart_rect = pygame.Rect(80, btn_y, btn_width, btn_height)
+    exit_rect = pygame.Rect(WIDTH - 80 - btn_width, btn_y, btn_width, btn_height)
+
+    while True:
+        mouse_pos = pygame.mouse.get_pos()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                # Button Clicks
+                if restart_rect.collidepoint(mouse_pos):
+                    board = Board()
+                    player = 1
+                    game_over = False
+                    continue
+
+                if exit_rect.collidepoint(mouse_pos):
+                    pygame.quit()
+                    sys.exit()
+
+                # Board Click (Human Turn)
+                if not game_over and player == human:
+                    mouseX, mouseY = event.pos
+                    if mouseY < BOARD_HEIGHT:  # Ensure click is inside game board
+                        clicked_row = int(mouseY // SQUARE_SIZE)
+                        clicked_col = int(mouseX // SQUARE_SIZE)
+
+                        if board.is_empty_square(clicked_row, clicked_col):
+                            board.mark_square(clicked_row, clicked_col, human)
+                            board.draw_figures()
+
+                            if board.check_win(human):
+                                print("Human Wins!")
+                                game_over = True
+                            elif board.is_full():
+                                print("It's a Draw!")
+                                game_over = True
+                            else:
+                                player = ai.player
+
+            # Keyboard Shortcuts
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    board = Board()
+                    player = 1
+                    game_over = False
+                elif event.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
+
+        # AI Turn
+        if player == ai.player and not game_over:
+            board.draw_lines()
+            board.draw_figures()
+            draw_buttons(restart_rect, exit_rect, mouse_pos)
+            pygame.display.update()
+            pygame.time.delay(300)
+
+            row, col = ai.eval(board)
+            if row is not None and col is not None:
+                board.mark_square(row, col, ai.player)
+                board.draw_figures()
+
+                if board.check_win(ai.player):
+                    print("AI Wins!")
+                    game_over = True
+                elif board.is_full():
+                    print("It's a Draw!")
+                    game_over = True
+                else:
+                    player = human
+
+        # Draw UI Frame
+        board.draw_lines()
+        board.draw_figures()
+        draw_buttons(restart_rect, exit_rect, mouse_pos)
+
+        pygame.display.update()
+
+
+if __name__ == "__main__":
+    main()
